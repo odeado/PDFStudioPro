@@ -76,12 +76,33 @@ const WordExport = {
             }
 
             const struct = await PDFViewer.getStructuredPageText(pageNum);
-            if (!struct || !struct.items || struct.items.length === 0) {
-                continue;
+            let items = null, pageW = 0, pageH = 0;
+
+            if (struct && struct.items && struct.items.length > 0) {
+                items = struct.items;
+                pageW = struct.viewportWidth;
+                pageH = struct.viewportHeight;
+            } else if (typeof OCREngine !== 'undefined') {
+                // No native text layer on this page (likely scanned) — reuse the
+                // OCR's positional data if that page has already been recognized.
+                const ocrPage = OCREngine.getPageStructure(pageNum);
+                if (ocrPage && ocrPage.items.length > 0) {
+                    items = ocrPage.items;
+                    pageW = ocrPage.width;
+                    pageH = ocrPage.height;
+                }
             }
 
-            const pageNodes = this._processPageItems(struct.items, struct.width, struct.height);
+            if (!items) continue;
+
+            const pageImages = await this._safeGetPageImages(pageNum);
+
+            const pageNodes = this._processPageItems(items, pageW, pageH);
             allNodes.push(...pageNodes);
+            if (pageImages && pageImages.length) {
+                allNodes.push({ type: 'imageCaption', text: 'Imágenes de esta página' });
+                pageImages.forEach(img => allNodes.push({ type: 'image', ...img }));
+            }
         }
 
         if (allNodes.length === 0) return null;
@@ -89,10 +110,30 @@ const WordExport = {
         return this._generateOpenXmlZip(allNodes);
     },
 
-    // Process positional items into structured rows, columns, headings
+    async _safeGetPageImages(pageNum) {
+        try {
+            if (typeof PDFViewer.getPageImages !== 'function') return null;
+            return await PDFViewer.getPageImages(pageNum);
+        } catch (e) {
+            console.warn('Image extraction failed for page', pageNum, e);
+            return null;
+        }
+    },
+
+    // Process positional items into structured rows, columns, headings.
+    // `items` use the {px, py, pw, ph, text} pixel-space convention shared by
+    // PDFViewer.getStructuredPageText() (native text) and OCREngine.getPageStructure()
+    // (recognized scans), so the same layout heuristics apply to both sources.
     _processPageItems(items, pageW, pageH) {
-        // Group items into lines by Y position (threshold ~5pt)
-        items.sort((a, b) => a.y - b.y || a.x - b.x);
+        // Estimate a typical line height from the items themselves, so the
+        // line-grouping threshold isn't a magic pixel constant that breaks at
+        // different zoom levels / OCR capture scales.
+        const heights = items.map(it => it.ph).filter(h => h > 0).sort((a, b) => a - b);
+        const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 12;
+        const lineThreshold = Math.max(4, medianH * 0.65);
+
+        // Group items into lines by Y position
+        items.sort((a, b) => a.py - b.py || a.px - b.px);
 
         const lines = [];
         let currentLine = null;
@@ -101,8 +142,8 @@ const WordExport = {
             const cleanText = item.text.trim();
             if (!cleanText) continue;
 
-            if (!currentLine || Math.abs(item.y - currentLine.y) > 6) {
-                currentLine = { y: item.y, items: [item] };
+            if (!currentLine || Math.abs(item.py - currentLine.y) > lineThreshold) {
+                currentLine = { y: item.py, items: [item] };
                 lines.push(currentLine);
             } else {
                 currentLine.items.push(item);
@@ -110,7 +151,7 @@ const WordExport = {
         }
 
         // Sort items inside each line left to right
-        lines.forEach(line => line.items.sort((a, b) => a.x - b.x));
+        lines.forEach(line => line.items.sort((a, b) => a.px - b.px));
 
         // Analyze lines for 2-column blocks
         const nodes = [];
@@ -124,6 +165,9 @@ const WordExport = {
         };
 
         const midX = pageW * 0.38; // Left/Right column boundary
+        // Font-size signal for headings, expressed relative to the page's own
+        // median line height so it works regardless of render/capture scale.
+        const headingH = medianH * 1.3;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -132,11 +176,14 @@ const WordExport = {
             if (!lineText) continue;
 
             // Check if centered title (top of page or large font)
-            const minX = line.items[0].x;
-            const maxX = line.items[line.items.length - 1].x + line.items[line.items.length - 1].w;
+            const minX = line.items[0].px;
+            const lastItem = line.items[line.items.length - 1];
+            const maxX = lastItem.px + lastItem.pw;
             const lineCenter = (minX + maxX) / 2;
             const pageCenter = pageW / 2;
-            const isCentered = Math.abs(lineCenter - pageCenter) < 60 && minX > 80;
+            const isCentered = Math.abs(lineCenter - pageCenter) < pageW * 0.09 && minX > pageW * 0.12;
+            const lineH = Math.max(...line.items.map(it => it.ph || 0));
+            const isLargeFont = lineH >= headingH && lineText.length < 70;
 
             if (isCentered && lineText.length < 60) {
                 flushTable();
@@ -148,16 +195,17 @@ const WordExport = {
                 continue;
             }
 
-            // Check if section heading (e.g., "Antecedentes Laborales", "Antecedentes Personales")
-            if (this._isSectionHeading(lineText)) {
+            // Check if section heading — either matches known heading vocabulary,
+            // or is geometrically distinct (noticeably larger than body text).
+            if (this._isSectionHeading(lineText) || (isLargeFont && i > 0)) {
                 flushTable();
                 nodes.push({ type: 'heading', text: lineText });
                 continue;
             }
 
             // Check if items split across Left and Right columns
-            const leftItems  = line.items.filter(it => it.x < midX);
-            const rightItems = line.items.filter(it => it.x >= midX);
+            const leftItems  = line.items.filter(it => it.px < midX);
+            const rightItems = line.items.filter(it => it.px >= midX);
 
             if (leftItems.length > 0 && rightItems.length > 0) {
                 tableRows.push({
@@ -231,8 +279,9 @@ const WordExport = {
                 continue;
             }
 
-            // Noise filter
-            if (line.length <= 2 && !/^\d+$/.test(line) && !/^[A-Z]\.$/.test(line)) continue;
+            // Noise filter — only strip lone stray characters (scan margin
+            // artifacts), not legit short words like "Sí", "No", "Dr", "N°".
+            if (line.length <= 1 && !/^\d$/.test(line)) continue;
 
             // Section Heading
             if (this._isSectionHeading(line)) {
@@ -326,15 +375,33 @@ const WordExport = {
     async _generateOpenXmlZip(nodes) {
         const zip = new JSZip();
 
-        const bodyXml = nodes.map(node => this._renderNodeXml(node)).join('\n');
+        // Images need a media file + relationship each; collect them while
+        // rendering the body so the rest of the package can reference them.
+        const mediaRels = [];
+        let imgCounter = 0;
+
+        const bodyXml = nodes.map(node => {
+            if (node.type === 'image') {
+                if (!node.bytes || !node.bytes.length) return '';
+                imgCounter++;
+                const relId = 'rIdImg' + imgCounter;
+                const filename = 'image' + imgCounter + '.png';
+                mediaRels.push({ relId, filename, bytes: node.bytes });
+                return this._renderImageNodeXml(node, relId, imgCounter);
+            }
+            return this._renderNodeXml(node);
+        }).join('\n');
+
         const title = App.fileName || 'Documento PDF';
         const now   = new Date().toISOString();
 
         // [Content_Types].xml
+        const pngContentType = mediaRels.length
+            ? '\n    <Default Extension="png" ContentType="image/png"/>' : '';
         zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
     <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-    <Default Extension="xml" ContentType="application/xml"/>
+    <Default Extension="xml" ContentType="application/xml"/>${pngContentType}
     <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
     <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
     <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
@@ -350,10 +417,20 @@ const WordExport = {
 </Relationships>`);
 
         // word/_rels/document.xml.rels
+        const imageRelsXml = mediaRels.map(r =>
+            `<Relationship Id="${r.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${r.filename}"/>`
+        ).join('\n    ');
         zip.folder('word').folder('_rels').file('document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
     <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+    ${imageRelsXml}
 </Relationships>`);
+
+        // word/media/*.png
+        if (mediaRels.length) {
+            const mediaFolder = zip.folder('word').folder('media');
+            mediaRels.forEach(r => mediaFolder.file(r.filename, r.bytes));
+        }
 
         // word/document.xml
         zip.folder('word').file('document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -361,6 +438,9 @@ const WordExport = {
             xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+            xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"
             mc:Ignorable="w14"
             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
     <w:body>
@@ -422,9 +502,63 @@ const WordExport = {
         return new Uint8Array(blob);
     },
 
+    // ---- Embedded Image Rendering ----
+    _renderImageNodeXml(node, relId, docPrId) {
+        let wPt = node.wPt > 0 ? node.wPt : 200;
+        let hPt = node.hPt > 0 ? node.hPt : 150;
+        const maxWPt = 400; // keep inside the page's content width
+        if (wPt > maxWPt) {
+            hPt = hPt * (maxWPt / wPt);
+            wPt = maxWPt;
+        }
+        const cx = Math.max(1, Math.round(wPt * 12700));
+        const cy = Math.max(1, Math.round(hPt * 12700));
+
+        return `<w:p>
+            <w:pPr><w:jc w:val="center"/><w:spacing w:before="80" w:after="160"/></w:pPr>
+            <w:r>
+                <w:drawing>
+                    <wp:inline distT="0" distB="0" distL="0" distR="0">
+                        <wp:extent cx="${cx}" cy="${cy}"/>
+                        <wp:docPr id="${docPrId}" name="Imagen ${docPrId}"/>
+                        <wp:cNvGraphicFramePr/>
+                        <a:graphic>
+                            <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                                <pic:pic>
+                                    <pic:nvPicPr>
+                                        <pic:cNvPr id="${docPrId}" name="Imagen ${docPrId}"/>
+                                        <pic:cNvPicPr/>
+                                    </pic:nvPicPr>
+                                    <pic:blipFill>
+                                        <a:blip r:embed="${relId}"/>
+                                        <a:stretch><a:fillRect/></a:stretch>
+                                    </pic:blipFill>
+                                    <pic:spPr>
+                                        <a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>
+                                        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                                    </pic:spPr>
+                                </pic:pic>
+                            </a:graphicData>
+                        </a:graphic>
+                    </wp:inline>
+                </w:drawing>
+            </w:r>
+        </w:p>`;
+    },
+
     _renderNodeXml(node) {
         if (node.type === 'pageBreak') {
             return `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+        }
+
+        if (node.type === 'imageCaption') {
+            return `<w:p>
+                <w:pPr><w:jc w:val="center"/><w:spacing w:before="160" w:after="40"/></w:pPr>
+                <w:r>
+                    <w:rPr><w:i/><w:sz w:val="18"/><w:szCs w:val="18"/><w:color w:val="6B7080"/></w:rPr>
+                    <w:t xml:space="preserve">${this._escapeXml(node.text)}</w:t>
+                </w:r>
+            </w:p>`;
         }
 
         if (node.type === 'title') {

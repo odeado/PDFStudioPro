@@ -89,7 +89,8 @@ const PDFTextEditor = {
         });
 
         canvasInner.appendChild(overlayContainer);
-        document.getElementById('textEditActions').style.display = 'flex';
+        const actions = document.getElementById('textEditActions');
+        if (actions) actions.style.display = 'flex';
     },
 
     clearOverlay() {

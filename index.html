@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="PDF Studio Pro - Editor de PDF con OCR, firma digital, conversión a Word y más herramientas profesionales">
     <meta name="theme-color" content="#0a0b10">
     <meta name="mobile-web-app-capable" content="yes">
@@ -267,6 +267,10 @@
                                 <div class="ocr-prog-fill" id="ocrProgressBar" style="width:0%"></div>
                             </div>
                             <p class="ocr-prog-label" id="ocrProgressLabel">Iniciando OCR...</p>
+                            <button class="btn-ghost full-w" id="btnOCRCancel" style="display:none" onclick="OCREngine.cancelOCR()">
+                                <span class="material-icons-round">cancel</span>
+                                Cancelar
+                            </button>
                         </div>
 
                         <div class="ocr-result-wrap" id="ocrResultWrap" style="display:none">
@@ -303,7 +307,7 @@
                         </h3>
                         <p class="panel-desc">Modifica nombres, fechas o datos haciendo clic directamente sobre cualquier texto de la pantalla.</p>
 
-                        <div class="action-btns">
+                        <div class="action-btns" id="textEditActions">
                             <button class="btn-primary full-w" onclick="PDFTextEditor.toggleEditMode()" id="btnActivateEdit">
                                 <span class="material-icons-round">edit</span>
                                 Activar Edición Directa

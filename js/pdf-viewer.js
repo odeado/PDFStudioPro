@@ -210,20 +210,14 @@ const PDFViewer = {
     getScale()        { return this._scale; },
     getDoc()          { return this._doc; },
 
-    // Get current page as image data URL (for OCR)
+    // Get current page rendered onto a canvas (for OCR). Returns the canvas
+    // itself (not just a data URL) so callers can enhance pixels before
+    // handing it to Tesseract.
     async getCurrentPageImage(scale = 2) {
-        if (!this._doc) return null;
-        const page     = await this._doc.getPage(this._currentPage);
-        const viewport = page.getViewport({ scale });
-        const canvas   = document.createElement('canvas');
-        canvas.width   = Math.floor(viewport.width);
-        canvas.height  = Math.floor(viewport.height);
-        const ctx = canvas.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        return canvas.toDataURL('image/png');
+        return this.getPageImage(this._currentPage, scale);
     },
 
-    // Get specific page as image
+    // Get specific page as a canvas + dimensions
     async getPageImage(pageNum, scale = 2) {
         if (!this._doc) return null;
         const page     = await this._doc.getPage(pageNum);
@@ -233,7 +227,153 @@ const PDFViewer = {
         canvas.height  = Math.floor(viewport.height);
         const ctx = canvas.getContext('2d');
         await page.render({ canvasContext: ctx, viewport }).promise;
-        return canvas.toDataURL('image/png');
+        return { canvas, width: canvas.width, height: canvas.height };
+    },
+
+    // ---- Extract embedded raster images (logos, photos, signatures) from a
+    // native-text page, so they aren't silently dropped by the Word export.
+    // Best-effort: any image that fails to decode is skipped rather than
+    // aborting the whole page.
+    async getPageImages(pageNum) {
+        if (!this._doc) return [];
+        try {
+            const page = await this._doc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1 });
+
+            // Ensure pdf.js has decoded this page's image XObjects into
+            // page.objs before we try to read them back out synchronously.
+            const dummy = document.createElement('canvas');
+            dummy.width  = Math.max(1, Math.floor(viewport.width));
+            dummy.height = Math.max(1, Math.floor(viewport.height));
+            try {
+                await page.render({ canvasContext: dummy.getContext('2d'), viewport }).promise;
+            } catch (e) { /* best effort */ }
+
+            const OPS = (typeof pdfjsLib !== 'undefined' && pdfjsLib.OPS) || {};
+            const opList = await page.getOperatorList();
+
+            const mul = (m1, m2) => [
+                m1[0]*m2[0] + m1[1]*m2[2],         m1[0]*m2[1] + m1[1]*m2[3],
+                m1[2]*m2[0] + m1[3]*m2[2],         m1[2]*m2[1] + m1[3]*m2[3],
+                m1[4]*m2[0] + m1[5]*m2[2] + m2[4], m1[4]*m2[1] + m1[5]*m2[3] + m2[5]
+            ];
+
+            let stack = [[1, 0, 0, 1, 0, 0]];
+            const found = [];
+            const seen = new Set();
+
+            for (let i = 0; i < opList.fnArray.length; i++) {
+                const fn = opList.fnArray[i];
+                const args = opList.argsArray[i];
+                const top = stack[stack.length - 1];
+
+                if (fn === OPS.save) {
+                    stack.push(top.slice());
+                } else if (fn === OPS.restore) {
+                    if (stack.length > 1) stack.pop();
+                } else if (fn === OPS.transform) {
+                    stack[stack.length - 1] = mul(args, top);
+                } else if (fn === OPS.paintFormXObjectBegin) {
+                    stack.push(mul(args[0] || [1, 0, 0, 1, 0, 0], top));
+                } else if (fn === OPS.paintFormXObjectEnd) {
+                    if (stack.length > 1) stack.pop();
+                } else if (fn === OPS.paintImageXObject || fn === OPS.paintImageXObjectRepeat) {
+                    const objId = args[0];
+                    if (!objId || seen.has(objId)) continue;
+                    seen.add(objId);
+
+                    const ctm = top;
+                    const corners = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => [
+                        ctm[0]*x + ctm[2]*y + ctm[4],
+                        ctm[1]*x + ctm[3]*y + ctm[5]
+                    ]);
+                    const xs = corners.map(c => c[0]);
+                    const ys = corners.map(c => c[1]);
+                    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+                    const y0 = Math.min(...ys), y1 = Math.max(...ys);
+                    const wPt = x1 - x0, hPt = y1 - y0;
+
+                    // Skip tiny/decorative specks (bullets, icons)
+                    if (!(wPt >= 20 && hPt >= 20)) continue;
+
+                    try {
+                        const imgObj = page.objs.get(objId);
+                        const png = this._imageObjToPng(imgObj);
+                        if (png) {
+                            found.push({
+                                bytes: png.bytes,
+                                pxWidth: png.width,
+                                pxHeight: png.height,
+                                xPt: x0,
+                                yPt: viewport.height - y1, // top-left origin
+                                wPt, hPt
+                            });
+                        }
+                    } catch (e) { /* skip images we can't decode */ }
+                }
+            }
+
+            found.sort((a, b) => a.yPt - b.yPt);
+            return found;
+        } catch (e) {
+            console.warn('getPageImages failed:', e);
+            return [];
+        }
+    },
+
+    // Convert a pdf.js image object (raw pixel buffer or ImageBitmap) into PNG bytes.
+    _imageObjToPng(img) {
+        if (!img) return null;
+        const canvas = document.createElement('canvas');
+
+        if (img.bitmap) {
+            canvas.width  = img.bitmap.width;
+            canvas.height = img.bitmap.height;
+            canvas.getContext('2d').drawImage(img.bitmap, 0, 0);
+        } else if (img.data && img.width && img.height) {
+            canvas.width  = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.createImageData(img.width, img.height);
+            const src = img.data;
+            const dst = imageData.data;
+            const total = img.width * img.height;
+
+            if (src.length === total * 4) {
+                dst.set(src);
+            } else if (src.length === total * 3) {
+                for (let p = 0; p < total; p++) {
+                    dst[p*4]   = src[p*3];
+                    dst[p*4+1] = src[p*3+1];
+                    dst[p*4+2] = src[p*3+2];
+                    dst[p*4+3] = 255;
+                }
+            } else if (src.length === Math.ceil(img.width / 8) * img.height) {
+                // 1-bit-per-pixel packed grayscale/mask
+                const rowBytes = Math.ceil(img.width / 8);
+                for (let y = 0; y < img.height; y++) {
+                    for (let x = 0; x < img.width; x++) {
+                        const byte = src[y * rowBytes + (x >> 3)];
+                        const bit  = (byte >> (7 - (x & 7))) & 1;
+                        const v = bit ? 255 : 0;
+                        const p = (y * img.width + x) * 4;
+                        dst[p] = v; dst[p+1] = v; dst[p+2] = v; dst[p+3] = 255;
+                    }
+                }
+            } else {
+                return null; // unrecognized pixel format
+            }
+            ctx.putImageData(imageData, 0, 0);
+        } else {
+            return null;
+        }
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return { bytes, width: canvas.width, height: canvas.height };
     },
 
     // Extract structured text elements with exact canvas pixel coordinates for overlay
