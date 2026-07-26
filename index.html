@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PDF Studio Pro - Editor de PDF con OCR, firma digital, conversión a Word y más herramientas profesionales">
+    <meta name="theme-color" content="#0a0b10">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>PDF Studio Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+    <!-- Splash Screen -->
+    <div id="splash" class="splash">
+        <div class="splash-bg"></div>
+        <div class="splash-content">
+            <div class="splash-logo">
+                <div class="splash-icon-ring">
+                    <span class="material-icons-round">picture_as_pdf</span>
+                </div>
+                <h1>PDF Studio <span class="gradient-text">Pro</span></h1>
+                <p>Tu editor PDF completo, portable y profesional</p>
+            </div>
+            <div class="splash-progress-wrap">
+                <div class="splash-progress-bar">
+                    <div class="splash-progress-fill" id="splashProgress"></div>
+                </div>
+                <span class="splash-status" id="splashStatus">Cargando módulos...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="app hidden">
+
+        <!-- Top Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <button class="sidebar-toggle" id="sidebarToggle" onclick="UI.toggleLeftSidebar()" title="Mostrar/ocultar miniaturas">
+                    <span class="material-icons-round">menu</span>
+                </button>
+                <div class="app-brand">
+                    <span class="material-icons-round brand-icon">picture_as_pdf</span>
+                    <span class="brand-name">PDF Studio <span class="brand-pro">Pro</span></span>
+                </div>
+                <div class="header-file-actions">
+                    <button class="hdr-btn hdr-btn-open" onclick="App.openFile()" title="Abrir PDF (Ctrl+O)">
+                        <span class="material-icons-round">folder_open</span>
+                        <span class="btn-label">Abrir</span>
+                    </button>
+                    <button class="hdr-btn" onclick="PDFTextEditor.toggleEditMode()" id="btnToggleTextEdit" title="Editar texto directamente en el PDF">
+                        <span class="material-icons-round">edit</span>
+                        <span class="btn-label">Editar Texto</span>
+                    </button>
+                    <button class="hdr-btn" onclick="App.saveFile()" id="btnSave" title="Guardar PDF">
+                        <span class="material-icons-round">save</span>
+                        <span class="btn-label">Guardar</span>
+                    </button>
+                    <div class="dropdown-wrapper">
+                        <button class="hdr-btn hdr-btn-accent" onclick="UI.toggleDropdown('exportMenu')" title="Exportar">
+                            <span class="material-icons-round">download</span>
+                            <span class="btn-label">Exportar</span>
+                            <span class="material-icons-round arrow-icon">expand_more</span>
+                        </button>
+                        <div class="dropdown-menu" id="exportMenu">
+                            <button class="dropdown-item" onclick="WordExport.export(); UI.closeDropdowns()">
+                                <span class="material-icons-round">description</span>
+                                <span>Exportar a Word (.docx)</span>
+                            </button>
+                            <button class="dropdown-item" onclick="WordExport.exportTxt(); UI.closeDropdowns()">
+                                <span class="material-icons-round">article</span>
+                                <span>Exportar texto (.txt)</span>
+                            </button>
+                            <div class="dropdown-divider"></div>
+                            <button class="dropdown-item" onclick="PdfTools.compress(); UI.closeDropdowns()">
+                                <span class="material-icons-round">compress</span>
+                                <span>Comprimir PDF</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-center">
+                <div class="file-name-tag" id="fileNameTag">
+                    <span class="material-icons-round">description</span>
+                    <span id="headerFileName">Sin archivo</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="zoom-control">
+                    <button class="icon-btn" onclick="PDFViewer.zoom(-0.25)" title="Alejar">
+                        <span class="material-icons-round">remove</span>
+                    </button>
+                    <span class="zoom-badge" id="zoomLevel">100%</span>
+                    <button class="icon-btn" onclick="PDFViewer.zoom(0.25)" title="Acercar">
+                        <span class="material-icons-round">add</span>
+                    </button>
+                    <button class="icon-btn" onclick="PDFViewer.fitToPage()" title="Ajustar a página">
+                        <span class="material-icons-round">fit_screen</span>
+                    </button>
+                </div>
+                <div class="page-control">
+                    <button class="icon-btn" onclick="PDFViewer.prevPage()" id="btnPrev">
+                        <span class="material-icons-round">chevron_left</span>
+                    </button>
+                    <div class="page-input-wrap">
+                        <input type="number" id="pageInput" value="1" min="1"
+                               onchange="PDFViewer.goToPage(parseInt(this.value))"
+                               onkeydown="if(event.key==='Enter') PDFViewer.goToPage(parseInt(this.value))">
+                        <span class="page-sep">de</span>
+                        <span id="totalPages" class="total-pages">0</span>
+                    </div>
+                    <button class="icon-btn" onclick="PDFViewer.nextPage()" id="btnNext">
+                        <span class="material-icons-round">chevron_right</span>
+                    </button>
+                </div>
+                <button class="icon-btn" onclick="UI.toggleRightPanel()" id="panelToggleBtn" title="Mostrar/ocultar panel de herramientas">
+                    <span class="material-icons-round">tune</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <div class="main-layout">
+
+            <!-- Left Sidebar: Thumbnails -->
+            <aside class="sidebar-left" id="sidebarLeft">
+                <div class="sidebar-open-btn-wrap">
+                    <button class="btn-primary full-w sidebar-open-btn" onclick="App.openFile()" title="Abrir otro documento PDF (Ctrl+O)">
+                        <span class="material-icons-round">folder_open</span>
+                        <span>Abrir otro PDF</span>
+                    </button>
+                </div>
+                <div class="sidebar-title">
+                    <span class="material-icons-round">grid_view</span>
+                    <span>Páginas</span>
+                </div>
+                <div class="thumbnails-scroll" id="thumbnailsContainer">
+                    <div class="thumb-placeholder">
+                        <span class="material-icons-round">description</span>
+                        <p>Abre un PDF para ver las páginas</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: PDF Viewer -->
+            <main class="viewer-section" id="viewerSection">
+                <!-- Drop Zone -->
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-zone-inner">
+                        <div class="drop-animation">
+                            <div class="drop-circle c1"></div>
+                            <div class="drop-circle c2"></div>
+                            <div class="drop-circle c3"></div>
+                            <span class="material-icons-round drop-icon-main">upload_file</span>
+                        </div>
+                        <h2>Arrastra tu PDF aquí</h2>
+                        <p class="drop-sub">o haz clic para seleccionar un archivo</p>
+                        <button class="btn-open-main" onclick="App.openFile()">
+                            <span class="material-icons-round">folder_open</span>
+                            Seleccionar PDF
+                        </button>
+                        <div class="feature-badges">
+                            <span class="feature-badge">🔍 OCR</span>
+                            <span class="feature-badge">✏️ Editar</span>
+                            <span class="feature-badge">🔄 Rotar</span>
+                            <span class="feature-badge">📑 Unir</span>
+                            <span class="feature-badge">✂️ Dividir</span>
+                            <span class="feature-badge">✍️ Firmar</span>
+                            <span class="feature-badge">📝 Word</span>
+                            <span class="feature-badge">📦 Comprimir</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PDF Canvas Area -->
+                <div class="canvas-wrap" id="canvasWrap" style="display:none">
+                    <div class="canvas-inner" id="canvasInner">
+                        <canvas id="pdfCanvas"></canvas>
+                        <canvas id="overlayCanvas" style="pointer-events:none"></canvas>
+                    </div>
+                </div>
+
+                <!-- Loading overlay for page rendering -->
+                <div class="page-loading" id="pageLoading" style="display:none">
+                    <div class="spinner"></div>
+                </div>
+            </main>
+
+            <!-- Right Panel: Tools -->
+            <aside class="panel-right" id="panelRight">
+                <!-- Vertical tab strip -->
+                <div class="tools-tab-strip">
+                    <button class="vtab active" id="vtab-ocr" onclick="UI.switchTab('ocr')" title="OCR – Reconocer texto">
+                        <span class="material-icons-round">document_scanner</span>
+                        <span class="vtab-label">OCR</span>
+                    </button>
+                    <button class="vtab" id="vtab-edit" onclick="UI.switchTab('edit')" title="Editar texto directamente en la pantalla">
+                        <span class="material-icons-round">edit_note</span>
+                        <span class="vtab-label">Editar</span>
+                    </button>
+                    <button class="vtab" id="vtab-pages" onclick="UI.switchTab('pages')" title="Rotar y gestionar páginas">
+                        <span class="material-icons-round">auto_stories</span>
+                        <span class="vtab-label">Páginas</span>
+                    </button>
+                    <button class="vtab" id="vtab-merge" onclick="UI.switchTab('merge')" title="Unir PDFs">
+                        <span class="material-icons-round">merge_type</span>
+                        <span class="vtab-label">Unir</span>
+                    </button>
+                    <button class="vtab" id="vtab-sign" onclick="UI.switchTab('sign')" title="Firma digital">
+                        <span class="material-icons-round">draw</span>
+                        <span class="vtab-label">Firma</span>
+                    </button>
+                    <button class="vtab" id="vtab-compress" onclick="UI.switchTab('compress')" title="Comprimir PDF">
+                        <span class="material-icons-round">compress</span>
+                        <span class="vtab-label">Comprimir</span>
+                    </button>
+                </div>
+
+                <!-- Panel Contents -->
+                <div class="panel-body">
+
+                    <!-- OCR Panel -->
+                    <div class="tool-panel active" id="panel-ocr">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">document_scanner</span>
+                            Reconocimiento de Texto (OCR)
+                        </h3>
+                        <p class="panel-desc">Extrae texto de imágenes y PDFs escaneados usando inteligencia artificial.</p>
+
+                        <div class="form-group">
+                            <label class="form-label">Idioma del documento</label>
+                            <select id="ocrLanguage" class="styled-select">
+                                <option value="spa" selected>🇪🇸 Español</option>
+                                <option value="eng">🇺🇸 Inglés</option>
+                                <option value="spa+eng">🌐 Español + Inglés</option>
+                                <option value="por">🇧🇷 Portugués</option>
+                                <option value="fra">🇫🇷 Francés</option>
+                                <option value="deu">🇩🇪 Alemán</option>
+                            </select>
+                        </div>
+
+                        <div class="action-btns">
+                            <button class="btn-primary full-w" onclick="OCREngine.runOCR('page')" id="btnOCRPage">
+                                <span class="material-icons-round">text_format</span>
+                                Analizar página actual
+                            </button>
+                            <button class="btn-secondary full-w" onclick="OCREngine.runOCR('all')" id="btnOCRAll">
+                                <span class="material-icons-round">article</span>
+                                Analizar todo el documento
+                            </button>
+                        </div>
+
+                        <div class="ocr-progress-wrap" id="ocrProgressWrap" style="display:none">
+                            <div class="ocr-prog-bar-bg">
+                                <div class="ocr-prog-fill" id="ocrProgressBar" style="width:0%"></div>
+                            </div>
+                            <p class="ocr-prog-label" id="ocrProgressLabel">Iniciando OCR...</p>
+                        </div>
+
+                        <div class="ocr-result-wrap" id="ocrResultWrap" style="display:none">
+                            <div class="result-toolbar">
+                                <span class="result-title">Texto extraído</span>
+                                <div class="result-actions">
+                                    <button class="icon-btn-sm" onclick="OCREngine.copyText()" title="Copiar">
+                                        <span class="material-icons-round">content_copy</span>
+                                    </button>
+                                    <button class="icon-btn-sm" onclick="OCREngine.clearText()" title="Limpiar">
+                                        <span class="material-icons-round">clear</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea id="ocrTextArea" class="ocr-textarea" placeholder="El texto aparecerá aquí..."></textarea>
+                            <div class="export-actions">
+                                <button class="btn-success full-w" onclick="WordExport.export()">
+                                    <span class="material-icons-round">description</span>
+                                    Exportar a Word (.docx)
+                                </button>
+                                <button class="btn-ghost full-w" onclick="WordExport.exportTxt()">
+                                    <span class="material-icons-round">article</span>
+                                    Guardar como .txt
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Text Edit Panel -->
+                    <div class="tool-panel" id="panel-edit">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">edit_note</span>
+                            Edición Directa en PDF
+                        </h3>
+                        <p class="panel-desc">Modifica nombres, fechas o datos haciendo clic directamente sobre cualquier texto de la pantalla.</p>
+
+                        <div class="action-btns">
+                            <button class="btn-primary full-w" onclick="PDFTextEditor.toggleEditMode()" id="btnActivateEdit">
+                                <span class="material-icons-round">edit</span>
+                                Activar Edición Directa
+                            </button>
+                            <button class="btn-success full-w" onclick="PDFTextEditor.applyEditsToPDF()">
+                                <span class="material-icons-round">task_alt</span>
+                                Aplicar Cambios al PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Pages Panel -->
+                    <div class="tool-panel" id="panel-pages">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">auto_stories</span>
+                            Gestión de Páginas
+                        </h3>
+
+                        <div class="tool-section-block">
+                            <div class="section-label">
+                                <span class="material-icons-round">rotate_right</span> Rotar
+                            </div>
+                            <div class="btn-grid-2">
+                                <button class="tool-action-btn" onclick="PdfTools.rotatePage(90)">
+                                    <span class="material-icons-round">rotate_right</span>
+                                    <span>90° Derecha</span>
+                                </button>
+                                <button class="tool-action-btn" onclick="PdfTools.rotatePage(-90)">
+                                    <span class="material-icons-round">rotate_left</span>
+                                    <span>90° Izquierda</span>
+                                </button>
+                                <button class="tool-action-btn" onclick="PdfTools.rotatePage(180)">
+                                    <span class="material-icons-round">flip</span>
+                                    <span>180°</span>
+                                </button>
+                                <button class="tool-action-btn tool-action-btn-accent" onclick="PdfTools.rotateAll(90)">
+                                    <span class="material-icons-round">refresh</span>
+                                    <span>Rotar todo</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tool-section-block">
+                            <div class="section-label">
+                                <span class="material-icons-round">content_cut</span> Páginas
+                            </div>
+                            <div class="btn-grid-1">
+                                <button class="tool-action-btn" onclick="PdfTools.deletePage()">
+                                    <span class="material-icons-round">delete_outline</span>
+                                    <span>Eliminar página actual</span>
+                                </button>
+                                <button class="tool-action-btn" onclick="PdfTools.extractPage()">
+                                    <span class="material-icons-round">call_split</span>
+                                    <span>Extraer página actual</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tool-section-block">
+                            <div class="section-label">
+                                <span class="material-icons-round">scissors</span> Dividir documento
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Páginas a extraer (ej: 1-3, 5, 7-9)</label>
+                                <input type="text" id="pageRange" placeholder="ej: 1-3, 5, 8-10" class="styled-input">
+                            </div>
+                            <button class="btn-primary full-w" onclick="PdfTools.extractRange()">
+                                <span class="material-icons-round">content_cut</span>
+                                Extraer rango
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Merge Panel -->
+                    <div class="tool-panel" id="panel-merge">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">merge_type</span>
+                            Unir PDFs
+                        </h3>
+                        <p class="panel-desc">Combina múltiples archivos PDF en uno solo. Arrastra para reordenar.</p>
+
+                        <div class="merge-drop-area" id="mergeDropArea" onclick="document.getElementById('mergeFileInput').click()">
+                            <span class="material-icons-round">add_to_photos</span>
+                            <p>Clic o arrastra PDFs aquí</p>
+                            <small>Puedes agregar varios a la vez</small>
+                        </div>
+
+                        <div id="mergeFileList" class="merge-file-list"></div>
+
+                        <div id="mergeActions" style="display:none">
+                            <button class="btn-primary full-w" onclick="PdfTools.mergePDFs()">
+                                <span class="material-icons-round">merge_type</span>
+                                Unir y descargar
+                            </button>
+                            <button class="btn-ghost full-w" onclick="PdfTools.clearMerge()">
+                                <span class="material-icons-round">clear_all</span>
+                                Limpiar lista
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Signature Panel -->
+                    <div class="tool-panel" id="panel-sign">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">draw</span>
+                            Firma Digital
+                        </h3>
+                        <p class="panel-desc">Dibuja tu firma y estámpala en el PDF.</p>
+
+                        <div class="signature-canvas-wrap">
+                            <canvas id="signatureCanvas" class="signature-canvas"></canvas>
+                            <div class="sig-hint">Dibuja tu firma aquí</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Color de tinta</label>
+                            <div class="ink-colors">
+                                <button class="ink-color-btn active" style="--c:#0d1117" data-color="#0d1117" onclick="Signature.setColor(this)"></button>
+                                <button class="ink-color-btn" style="--c:#0d47a1" data-color="#0d47a1" onclick="Signature.setColor(this)"></button>
+                                <button class="ink-color-btn" style="--c:#b71c1c" data-color="#b71c1c" onclick="Signature.setColor(this)"></button>
+                                <button class="ink-color-btn" style="--c:#1b5e20" data-color="#1b5e20" onclick="Signature.setColor(this)"></button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Tamaño en el PDF: <span id="signSizeVal">200px</span></label>
+                            <input type="range" id="signatureSize" min="80" max="400" value="200"
+                                   oninput="document.getElementById('signSizeVal').textContent=this.value+'px'"
+                                   class="range-input">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Posición en la página</label>
+                            <div class="position-grid" id="positionGrid">
+                                <button class="pos-btn" data-pos="tl" onclick="Signature.setPosition(this)">↖</button>
+                                <button class="pos-btn" data-pos="tc" onclick="Signature.setPosition(this)">↑</button>
+                                <button class="pos-btn" data-pos="tr" onclick="Signature.setPosition(this)">↗</button>
+                                <button class="pos-btn" data-pos="ml" onclick="Signature.setPosition(this)">←</button>
+                                <button class="pos-btn" data-pos="mc" onclick="Signature.setPosition(this)">·</button>
+                                <button class="pos-btn" data-pos="mr" onclick="Signature.setPosition(this)">→</button>
+                                <button class="pos-btn active" data-pos="bl" onclick="Signature.setPosition(this)">↙</button>
+                                <button class="pos-btn" data-pos="bc" onclick="Signature.setPosition(this)">↓</button>
+                                <button class="pos-btn" data-pos="br" onclick="Signature.setPosition(this)">↘</button>
+                            </div>
+                        </div>
+
+                        <div class="action-btns">
+                            <button class="btn-ghost" onclick="Signature.clear()">
+                                <span class="material-icons-round">clear</span>
+                                Borrar firma
+                            </button>
+                            <button class="btn-primary" onclick="Signature.stamp()">
+                                <span class="material-icons-round">approval</span>
+                                Estampar en PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Compress Panel -->
+                    <div class="tool-panel" id="panel-compress">
+                        <h3 class="panel-heading">
+                            <span class="material-icons-round">compress</span>
+                            Comprimir PDF
+                        </h3>
+                        <p class="panel-desc">Reduce el tamaño del archivo eliminando datos innecesarios.</p>
+
+                        <div class="file-size-card" id="fileSizeCard" style="display:none">
+                            <div class="size-info">
+                                <span class="material-icons-round">insert_drive_file</span>
+                                <div>
+                                    <div class="size-label">Tamaño actual</div>
+                                    <div class="size-value" id="fileSizeDisplay">—</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Nivel de compresión</label>
+                            <div class="compress-levels">
+                                <button class="compress-level-btn" data-level="light" onclick="PdfTools.setCompressLevel(this)">
+                                    <span class="material-icons-round">speed</span>
+                                    <strong>Ligera</strong>
+                                    <small>Mayor calidad</small>
+                                </button>
+                                <button class="compress-level-btn active" data-level="medium" onclick="PdfTools.setCompressLevel(this)">
+                                    <span class="material-icons-round">balance</span>
+                                    <strong>Media</strong>
+                                    <small>Balanceada</small>
+                                </button>
+                                <button class="compress-level-btn" data-level="heavy" onclick="PdfTools.setCompressLevel(this)">
+                                    <span class="material-icons-round">compress</span>
+                                    <strong>Máxima</strong>
+                                    <small>Menor tamaño</small>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button class="btn-primary full-w" onclick="PdfTools.compress()">
+                            <span class="material-icons-round">download</span>
+                            Comprimir y descargar
+                        </button>
+                    </div>
+
+                </div>
+            </aside>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Listo — Abre un PDF para comenzar</span>
+            </div>
+            <div class="status-center" id="statusCenter"></div>
+            <div class="status-right" id="statusRight"></div>
+        </footer>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Hidden File Inputs -->
+    <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="App.handleFileInput(this)">
+    <input type="file" id="mergeFileInput" accept=".pdf" multiple style="display:none" onchange="PdfTools.handleMergeInput(this)">
+
+    <!-- External Libraries (CDN) -->
+    <script>
+        // Set PDF.js worker before loading the library
+        window.pdfjsWorkerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+    <!-- App Modules -->
+    <script src="js/app.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/pdf-viewer.js"></script>
+    <script src="js/pdf-text-editor.js"></script>
+    <script src="js/ocr-engine.js"></script>
+    <script src="js/pdf-tools.js"></script>
+    <script src="js/signature.js"></script>
+    <script src="js/word-export.js"></script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+PDF Studio Pro — Guía de Uso
+=================================================
+
+¿QUÉ ES PDF STUDIO PRO?
+Una herramienta completa para trabajar con PDFs:
+✅ Ver PDFs con miniaturas de páginas
+✅ OCR: extraer texto de PDFs escaneados o con imágenes
+✅ Exportar a Word (.docx) y texto (.txt)
+✅ Rotar páginas
+✅ Unir múltiples PDFs en uno
+✅ Dividir / extraer páginas
+✅ Firma digital (dibujar y estampar)
+✅ Comprimir PDFs
+
+=================================================
+CÓMO ABRIRLO
+=================================================
+
+OPCIÓN 1 — DOBLE CLIC (más fácil):
+  → Haz doble clic en "Abrir PDF Studio Pro.bat"
+  → Se abrirá tu navegador automáticamente
+  → Funciona con Python (si está instalado) o Node.js
+
+OPCIÓN 2 — DIRECTO EN NAVEGADOR:
+  → Abre index.html directamente en Chrome, Edge o Firefox
+  → La mayoría de funciones funcionan directamente
+  → Recomendado: Google Chrome o Microsoft Edge
+
+OPCIÓN 3 — RED LOCAL (para usar en móvil/tablet):
+  → Ejecuta "Abrir PDF Studio Pro.bat" en el PC
+  → En el móvil, abre el navegador y escribe:
+    http://[IP-DE-TU-PC]:8080
+  → Para ver tu IP: abre CMD y escribe "ipconfig"
+
+=================================================
+FUNCIONES PRINCIPALES
+=================================================
+
+📂 ABRIR PDF:
+  - Arrastra el archivo al centro de la pantalla
+  - O haz clic en "Abrir" en la barra superior
+
+💾 GUARDAR:
+  - Botón "Guardar" — guarda los cambios en PDF
+  - Botón "Exportar" — opciones de exportación
+
+🔍 OCR (RECONOCIMIENTO DE TEXTO):
+  - Abre el panel derecho (pestaña "OCR")
+  - Selecciona el idioma (Español por defecto)
+  - Clic en "Analizar esta página" o "Analizar todo"
+  - Espera unos segundos (primera vez descarga datos)
+  - El texto aparece en el editor de texto
+  - Puedes editarlo y luego exportar a Word
+
+📝 EXPORTAR A WORD:
+  - Primero ejecuta el OCR para extraer texto
+  - Clic en "Exportar a Word (.docx)"
+  - Se descarga automáticamente
+
+🔄 ROTAR PÁGINAS:
+  - Panel derecho → pestaña "Páginas"
+  - Botones para rotar 90° izquierda/derecha o 180°
+  - "Rotar Todo" rota todas las páginas
+
+📑 UNIR PDFs:
+  - Panel derecho → pestaña "Unir"
+  - Arrastra o selecciona los PDFs a combinar
+  - Clic en "Unir y descargar"
+
+✍️ FIRMA DIGITAL:
+  - Panel derecho → pestaña "Firma"
+  - Dibuja tu firma con el mouse (o dedo en táctil)
+  - Elige color y posición
+  - Clic en "Estampar en PDF"
+
+📦 COMPRIMIR:
+  - Panel derecho → pestaña "Comprimir"
+  - Elige nivel de compresión
+  - Clic en "Comprimir y descargar"
+
+=================================================
+REQUISITOS
+=================================================
+
+- Navegador moderno: Chrome 90+, Edge 90+, Firefox 88+, Safari 14+
+- Conexión a internet (solo para cargar las librerías la primera vez)
+- Python 3 o Node.js (opcional, para servidor local)
+
+=================================================
+SOPORTE DE DISPOSITIVOS
+=================================================
+
+✅ Windows (PC/laptop)
+✅ Android (Chrome móvil)
+✅ iPad/iPhone (Safari/Chrome)
+✅ Linux/Mac (cualquier navegador moderno)
+
+=================================================
+NOTAS IMPORTANTES
+=================================================
+
+⚠️ El OCR requiere internet la primera vez para descargar
+   los datos del idioma. Después se guarda en caché.
+
+⚠️ Los archivos NO se suben a ningún servidor.
+   Todo el procesamiento ocurre localmente en tu dispositivo.
+   Tus PDFs son completamente privados.
+
+⚠️ Para documentos muy grandes (más de 50 páginas),
+   el OCR completo puede tardar varios minutos.
+
+=================================================
+PDF Studio Pro — Versión 1.0
+Creado con ❤️ usando PDF.js, pdf-lib y Tesseract.js
+=================================================
