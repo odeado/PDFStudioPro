@@ -67,11 +67,29 @@ const OCREngine = {
             const d = imgData.data;
             const n = d.length;
 
-            // First pass: grayscale + find the luminance range
+            // First pass: grayscale + find the luminance range.
+            // Plain luminance (0.299R+0.587G+0.114B) under-darkens saturated
+            // ink colors — a strong red like #E30613 comes out around lum 90,
+            // noticeably lighter than true black (0), which is why colored
+            // headings/stamps OCR worse than black text even though they look
+            // equally "dark" to a person. We detect saturated (non-gray)
+            // pixels via chroma (max-min channel) and push them toward black
+            // before contrast-stretching, so colored ink gets the same
+          // strong black/white separation that plain black text already has.
             let min = 255, max = 0;
             const gray = new Uint8ClampedArray(n / 4);
             for (let i = 0, g = 0; i < n; i += 4, g++) {
-                const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+                const r = d[i], gr = d[i + 1], b = d[i + 2];
+                let lum = 0.299 * r + 0.587 * gr + 0.114 * b;
+
+                const chroma = Math.max(r, gr, b) - Math.min(r, gr, b);
+                if (chroma > 40 && lum < 210) {
+                    // Colored ink, not a light background tint — darken it
+                    // proportionally to how saturated it is.
+                    const boost = Math.min(1, chroma / 120);
+                    lum = lum * (1 - boost * 0.65);
+                }
+
                 gray[g] = lum;
                 if (lum < min) min = lum;
                 if (lum > max) max = lum;
