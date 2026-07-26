@@ -98,6 +98,16 @@ const WordExport = {
             const pageImages = await this._safeGetPageImages(pageNum);
 
             const pageNodes = this._processPageItems(items, pageW, pageH);
+
+            // Cheap diagnostic: a giant run-on paragraph almost always means the
+            // line-grouping threshold got fooled by unusual per-item metrics on
+            // this particular PDF. Doesn't change behavior, just surfaces it.
+            const suspect = pageNodes.find(n => n.type === 'paragraph' && n.text && n.text.length > 350);
+            if (suspect && items.length > 15) {
+                console.warn(`Word export: page ${pageNum} produced a suspiciously long single block ` +
+                    `(${suspect.text.length} chars from ${items.length} items) — layout detection may have failed.`);
+            }
+
             allNodes.push(...pageNodes);
             if (pageImages && pageImages.length) {
                 allNodes.push({ type: 'imageCaption', text: 'Imágenes de esta página' });
@@ -130,7 +140,13 @@ const WordExport = {
         // different zoom levels / OCR capture scales.
         const heights = items.map(it => it.ph).filter(h => h > 0).sort((a, b) => a - b);
         const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 12;
-        const lineThreshold = Math.max(4, medianH * 0.65);
+        // Bound the threshold two ways in addition to the font-size estimate:
+        // some PDF producers emit unusual/oversized font-matrix values, which
+        // would otherwise inflate this threshold enough to merge the entire
+        // page into one line. Capping it against an absolute pixel limit and
+        // against the page's own height keeps grouping safe even when the
+        // font-size signal can't be trusted.
+        const lineThreshold = Math.max(4, Math.min(medianH * 0.65, 26, pageH * 0.02 || 26));
 
         // Group items into lines by Y position
         items.sort((a, b) => a.py - b.py || a.px - b.px);
@@ -166,8 +182,10 @@ const WordExport = {
 
         const midX = pageW * 0.38; // Left/Right column boundary
         // Font-size signal for headings, expressed relative to the page's own
-        // median line height so it works regardless of render/capture scale.
-        const headingH = medianH * 1.3;
+        // median line height (same sanity cap as lineThreshold, since a bad
+        // font-matrix reading would otherwise flag ordinary lines as headings).
+        const safeMedianH = Math.min(medianH, pageH * 0.03 || medianH);
+        const headingH = safeMedianH * 1.3;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
