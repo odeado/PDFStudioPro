@@ -8,13 +8,21 @@ const UI = {
     _rightOpen: true,
     _activeTab: 'ocr',
 
+    init() {
+        if (window.innerWidth <= 768) {
+            this._leftOpen  = false;
+            this._rightOpen = false;
+            document.getElementById('sidebarLeft')?.classList.add('collapsed');
+            document.getElementById('panelRight')?.classList.add('collapsed');
+        }
+    },
+
     // ---- Sidebar Toggles ----
     toggleLeftSidebar() {
         const sidebar = document.getElementById('sidebarLeft');
         this._leftOpen = !this._leftOpen;
         sidebar.classList.toggle('collapsed', !this._leftOpen);
 
-        // On mobile, use class instead of width
         if (window.innerWidth <= 768) {
             sidebar.classList.toggle('mobile-open', this._leftOpen);
         }
@@ -24,8 +32,22 @@ const UI = {
         const panel = document.getElementById('panelRight');
         this._rightOpen = !this._rightOpen;
         panel.classList.toggle('collapsed', !this._rightOpen);
+
+        let backdrop = document.getElementById('mobileBackdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.id = 'mobileBackdrop';
+            backdrop.className = 'mobile-backdrop';
+            backdrop.onclick = () => this.toggleRightPanel();
+            document.body.appendChild(backdrop);
+        }
+
+        if (window.innerWidth <= 768) {
+            backdrop.classList.toggle('active', this._rightOpen);
+        }
+
         document.getElementById('panelToggleBtn').style.color =
-            this._rightOpen ? '' : 'var(--primary)';
+            this._rightOpen ? 'var(--primary)' : '';
     },
 
     // ---- Tab Switching ----

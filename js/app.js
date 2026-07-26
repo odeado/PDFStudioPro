@@ -16,6 +16,9 @@ const App = {
             pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdfjsWorkerSrc;
         }
 
+        // Initialize UI responsive state for mobile
+        UI.init();
+
         // Splash animation
         await this._runSplash();
 

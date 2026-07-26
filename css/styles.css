@@ -1143,17 +1143,26 @@ option { background: var(--bg-card); }
 /* ============================================================
    RESPONSIVE — MOBILE / TABLET
    ============================================================ */
+
+/* Tablet: trim panel a bit so it doesn't dominate the layout */
+@media (max-width: 1024px) and (min-width: 769px) {
+    :root { --panel-width: 280px; }
+}
+
 @media (max-width: 768px) {
     :root {
-        --panel-width: 280px;
-        --sidebar-width: 160px;
+        --panel-width: 320px;
+        --sidebar-width: 200px;
     }
+
+    body { overflow: hidden; }
 
     .sidebar-left { display: none; }
     .sidebar-left.mobile-open {
         display: flex;
         position: fixed; left: 0; top: var(--header-height);
         height: calc(100vh - var(--header-height) - var(--status-height));
+        max-width: 80vw;
         z-index: 200;
         box-shadow: var(--shadow-lg);
     }
@@ -1161,22 +1170,97 @@ option { background: var(--bg-card); }
     .panel-right {
         position: fixed; right: 0; top: var(--header-height);
         height: calc(100vh - var(--header-height) - var(--status-height));
+        max-width: 90vw;
         z-index: 200;
         box-shadow: var(--shadow-lg);
+        transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
     }
-    .panel-right.collapsed { right: -100%; }
 
+    .panel-right.collapsed {
+        right: -100% !important;
+        display: flex !important;
+    }
+
+    .mobile-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.65);
+        backdrop-filter: blur(4px);
+        z-index: 190;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+    .mobile-backdrop.active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    /* Header: shed weight so it fits narrow screens */
+    .app-header {
+        padding: 0 8px;
+        padding-left: max(8px, env(safe-area-inset-left));
+        padding-right: max(8px, env(safe-area-inset-right));
+        gap: 4px;
+    }
     .hdr-btn .btn-label { display: none; }
-    .brand-name { display: none; }
+    .hdr-btn { padding: 0 8px; }
+    .app-brand { display: none; }
+    .header-left::after { display: none; }
     .file-name-tag { display: none; }
+    .zoom-control { display: none; }
+    .header-file-actions { gap: 2px; }
+    .header-right { gap: 4px; }
 
-    .app-header { padding: 0 8px; }
+    /* Safety net: if buttons still don't fit, scroll instead of clipping */
+    .header-left, .header-right {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .header-left::-webkit-scrollbar, .header-right::-webkit-scrollbar { display: none; }
+
+    .dropdown-menu { max-width: calc(100vw - 24px); }
+
+    /* Bigger touch targets */
+    .icon-btn { width: 36px; height: 36px; }
+    .vtab { padding: 12px 4px; }
+    .pos-btn { height: 40px; }
+    .ink-color-btn { width: 32px; height: 32px; }
+
+    /* Give the PDF more room on small viewports */
+    .canvas-wrap { padding: 14px; }
+
+    .status-bar {
+        padding: 0 10px;
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+    }
+    .status-left span:not(.status-dot),
+    .status-right { display: none; }
 }
 
 @media (max-width: 480px) {
-    :root { --panel-width: calc(100vw - 56px); }
+    :root { --panel-width: calc(100vw - 52px); }
 
-    .zoom-control { display: none; }
-    .hdr-btn-accent .btn-label { display: none; }
     .hdr-btn-accent .arrow-icon { display: none; }
+    .header-file-actions { gap: 2px; }
+    .hdr-btn { padding: 0 6px; }
+
+    /* Trim the file-editing button, its function is duplicated by the Editar tab */
+    #btnToggleTextEdit { display: none; }
+
+    /* Simplify the page control: just prev / number / next */
+    .page-sep, .total-pages { display: none; }
+    .page-input-wrap input { width: 26px; }
+
+    /* Last-resort: let the header scroll sideways rather than break */
+    .app-header {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .app-header::-webkit-scrollbar { display: none; }
+
+    .splash-progress-wrap { width: 85vw; max-width: 280px; }
+    .splash h1 { font-size: 28px; }
+    .splash-icon-ring { width: 80px; height: 80px; }
+    .splash-icon-ring .material-icons-round { font-size: 42px; }
 }
