@@ -307,15 +307,17 @@
                         </h3>
                         <p class="panel-desc">Modifica nombres, fechas o datos haciendo clic directamente sobre cualquier texto de la pantalla.</p>
 
-                        <div class="action-btns" id="textEditActions">
+                        <div class="action-btns">
                             <button class="btn-primary full-w" onclick="PDFTextEditor.toggleEditMode()" id="btnActivateEdit">
                                 <span class="material-icons-round">edit</span>
                                 Activar Edición Directa
                             </button>
-                            <button class="btn-success full-w" onclick="PDFTextEditor.applyEditsToPDF()">
-                                <span class="material-icons-round">task_alt</span>
-                                Aplicar Cambios al PDF
-                            </button>
+                            <div id="textEditActions" style="display:none">
+                                <button class="btn-success full-w" onclick="PDFTextEditor.applyEditsToPDF()">
+                                    <span class="material-icons-round">task_alt</span>
+                                    Aplicar Cambios al PDF
+                                </button>
+                            </div>
                         </div>
                     </div>
 
