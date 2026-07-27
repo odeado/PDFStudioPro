@@ -45,6 +45,11 @@ const PDFTextEditor = {
 
         const canvasInner = document.getElementById('canvasInner');
         const canvas = document.getElementById('pdfCanvas');
+        const canvasCtx = canvas.getContext('2d');
+        // The overlay boxes are positioned in the canvas's CSS/display pixel
+        // space, but the canvas's actual pixel buffer is bigger by the device
+        // pixel ratio — need this to sample the right region for ink color.
+        const sampleScale = canvas.width / (canvas.clientWidth || parseFloat(canvas.style.width) || canvas.width);
 
         const overlayContainer = document.createElement('div');
         overlayContainer.id = 'textEditOverlay';
@@ -66,6 +71,11 @@ const PDFTextEditor = {
             box.style.height    = Math.max(Math.round(item.ph), 14) + 'px';
             box.style.fontSize  = Math.max(Math.round(item.fontH * struct.scale), 10) + 'px';
 
+            // Sample the actual rendered ink color under this text, so edits
+            // to colored text (red invoice headers, etc.) don't get flattened
+            // to black when written back into the PDF.
+            const inkColor = this._sampleInkColor(canvasCtx, canvas, item.px, item.py, item.pw, item.ph, sampleScale);
+
             box.onblur = () => {
                 const newText = box.innerText.trim();
                 if (newText !== item.text.trim()) {
@@ -80,7 +90,8 @@ const PDFTextEditor = {
                         h: item.fontH,
                         fontSize: item.fontH,
                         isBold: item.isBold,
-                        isItalic: item.isItalic
+                        isItalic: item.isItalic,
+                        color: inkColor
                     });
                 }
             };
@@ -91,6 +102,39 @@ const PDFTextEditor = {
         canvasInner.appendChild(overlayContainer);
         const actions = document.getElementById('textEditActions');
         if (actions) actions.style.display = 'flex';
+    },
+
+    // Read the actual rendered pixels under a text item and return the
+    // darkest ("most ink-like") color found — this is the item's real color
+    // (red, blue, black...) as it appears on the page, without needing to
+    // parse the PDF's content-stream color operators.
+    _sampleInkColor(ctx, canvas, pxLeft, pyTop, pw, ph, sampleScale) {
+        try {
+            const bx = Math.max(0, Math.round(pxLeft * sampleScale));
+            const by = Math.max(0, Math.round(pyTop * sampleScale));
+            const bw = Math.min(canvas.width  - bx, Math.max(1, Math.round(pw * sampleScale)));
+            const bh = Math.min(canvas.height - by, Math.max(1, Math.round(ph * sampleScale)));
+            if (bw <= 0 || bh <= 0) return null;
+
+            const { data } = ctx.getImageData(bx, by, bw, bh);
+            let best = null, bestLum = 256;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                if (lum < bestLum) {
+                    bestLum = lum;
+                    best = { r, g, b };
+                }
+            }
+
+            // If the darkest pixel found is still near-white, this box is
+            // probably blank/whitespace — not a reliable color sample.
+            if (!best || bestLum > 200) return null;
+            return best;
+        } catch (e) {
+            return null;
+        }
     },
 
     clearOverlay() {
@@ -154,13 +198,16 @@ const PDFTextEditor = {
                     color: PDFLib.rgb(1, 1, 1),
                 });
 
-                // 2. Draw modified text at exact baseline y
+                // 2. Draw modified text at exact baseline y, in the same ink
+                // color the original text had (falls back to black if we
+                // couldn't sample it, e.g. edited box was blank before).
+                const c = edit.color || { r: 0, g: 0, b: 0 };
                 page.drawText(edit.newText, {
                     x: edit.x,
                     y: edit.y,
                     size: fontSize,
                     font: font,
-                    color: PDFLib.rgb(0, 0, 0),
+                    color: PDFLib.rgb(c.r / 255, c.g / 255, c.b / 255),
                 });
             }
 
